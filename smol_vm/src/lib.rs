@@ -229,6 +229,26 @@ impl Stack {
         let mi = self.memory[(u16::MAX - 2) as usize];
         u16::from_le_bytes([li, mi])
     }
+
+    pub fn save_value(&mut self, addr: u16, value: u8) {
+        self.memory[addr as usize] = value;
+    }
+
+    pub fn save_value_16(&mut self, addr: u16, value: u16) {
+        let [li, mi] = value.to_le_bytes();
+        self.memory[addr as usize] = li;
+        self.memory[addr as usize + 1] = mi;
+    }
+
+    pub fn load_value(&mut self, addr: u16) -> u8 {
+        self.memory[addr as usize]
+    }
+
+    pub fn load_value_16(&mut self, addr: u16) -> u16 {
+        let li = self.memory[addr as usize];
+        let mi = self.memory[addr as usize + 1];
+        u16::from_le_bytes([li, mi])
+    }
 }
 
 impl Default for Stack {
@@ -391,6 +411,74 @@ impl Vm {
         used
     }
 
+    fn decode_load_store_instr(&mut self, instr: u8) -> u16 {
+        let mut used: u16 = 1;
+
+        let ic = self.registers.ic + 1;
+        match (instr >> 4) & 0b11 {
+            0b00 => {
+                let has_memory_target = (instr >> 3) & 0b1 == 1;
+
+                // If the target is memory, the source value can be decoded
+                // after the two addrees bytes
+                let src_ic = if has_memory_target { ic + 1 } else { ic };
+
+                let src_value = match (instr >> 1) & 0b11 {
+                    // 8 bit register or 16 bit register
+                    0b00 | 0b01 => {
+                        // If there's a memory target, the register is not encoded in the same byte as source
+                        if has_memory_target {
+                            used += 1;
+                            // If the target is memory, we need to skip the second memory addres byte
+                            self.decode_registers(self.instructions.get(src_ic + 1))
+                                .0
+                                .value
+                        } else {
+                            self.decode_registers(self.instructions.get(src_ic)).1.value
+                        }
+                    }
+                    // 8 bit immediate
+                    0b10 => {
+                        used += 1;
+                        // If the source is not a register, immideate is stored in the next instruction
+                        self.immediate_instr(src_ic + 1).into()
+                    }
+                    // 16 bit immediate
+                    0b11 => {
+                        used += 2;
+                        // If the source is not a register, immideate is stored in the next instruction
+                        self.immediate_instr_16b(src_ic + 1).into()
+                    }
+                    _ => unreachable!(),
+                };
+
+                match (instr >> 3) & 0b1 {
+                    // Register target
+                    0b0 => {
+                        used += 1;
+                        let mut register = self.decode_register(self.instructions.get(ic));
+                        register.value = src_value;
+                        self.register_save(register);
+                    }
+                    // Memory target target
+                    0b1 => {
+                        used += 2;
+                        // register addess is encoded the same way immediates are
+                        let addr = self.immediate_instr_16b(ic);
+                        match src_value {
+                            Either::Left(value) => self.stack.save_value(addr, value),
+                            Either::Right(value) => self.stack.save_value_16(addr, value),
+                        }
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            _ => unreachable!(),
+        }
+
+        used
+    }
+
     fn decode_branch_instr(&mut self, instr: u8) {
         match (instr >> 3) & 0b111 {
             // Relative jump
@@ -469,7 +557,10 @@ impl Vm {
                 let used = self.decode_alu_instr(instr);
                 self.registers.ic += used;
             }
-            0b01 => unimplemented!("LoadStore is not implemented"),
+            0b01 => {
+                let used = self.decode_load_store_instr(instr);
+                self.registers.ic += used;
+            }
             0b10 => {
                 let used = self.decode_stack_instr(instr);
                 self.registers.ic += used;
