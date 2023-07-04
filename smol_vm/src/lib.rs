@@ -285,6 +285,26 @@ pub struct Vm {
 }
 
 impl Vm {
+    fn stack_pop(&mut self) -> u8 {
+        self.registers.sp -= 1;
+        self.stack.load_value(self.registers.sp)
+    }
+
+    fn stack_pop_16b(&mut self) -> u16 {
+        self.registers.sp -= 2;
+        self.stack.load_value_16(self.registers.sp)
+    }
+
+    fn stack_push(&mut self, val: u8) {
+        self.stack.save_value(self.registers.sp, val);
+        self.registers.sp += 1;
+    }
+
+    fn stack_push_16b(&mut self, val: u16) {
+        self.stack.save_value_16(self.registers.sp, val);
+        self.registers.sp += 2;
+    }
+
     fn register_val(&self, reg: u8) -> RegisterValue {
         match reg {
             0b0000 => RegisterValue::new(self.registers.r0.into(), Register::R0),
@@ -581,8 +601,44 @@ impl Vm {
     fn decode_stack_instr(&mut self, instr: u8) -> u16 {
         let mut used: u16;
         match (instr >> 4) & 0b11 {
-            0b00 => unimplemented!("Push is not implemented"),
-            0b01 => unimplemented!("Pop is not implemented"),
+            // Push
+            0b00 => {
+                used = 2;
+                let value = match (instr >> 2) & 0b11 {
+                    // 8 bit and 16 register has the same logic
+                    0b00 | 0b01 => {
+                        let reg = self.instructions.get(self.registers.ic + 1);
+                        self.decode_register(reg).value
+                    }
+                    // 8 bit immideate
+                    0b10 => self.immediate_instr(self.registers.ic + 1).into(),
+                    // 16 bit immideate
+                    0b11 => {
+                        used = 3;
+                        self.immediate_instr_16b(self.registers.ic + 1).into()
+                    }
+                    _ => unreachable!(),
+                };
+
+                match value {
+                    Either::Left(val) => self.stack_push(val),
+                    Either::Right(val) => self.stack_push_16b(val),
+                }
+            }
+            // Pop
+            0b01 => {
+                // Can only pop into a register
+                used = 2;
+                let reg = self.instructions.get(self.registers.ic + 1);
+                let mut reg = self.decode_register(reg);
+                let popped = match (instr >> 2) & 0b1 == 0 {
+                    true => self.stack_pop().into(),
+                    false => self.stack_pop_16b().into(),
+                };
+                reg.value = popped;
+                self.register_save(reg);
+            }
+            // Load variable
             0b10 => {
                 // We always need to save our stack pointer
                 self.stack.save_stack_pointer(self.registers.sp);
@@ -608,6 +664,7 @@ impl Vm {
                     _ => unreachable!(),
                 }
             }
+            // Unload variable
             0b11 => {
                 self.registers.sp = self.stack.load_stack_pointer();
                 used = 1;
