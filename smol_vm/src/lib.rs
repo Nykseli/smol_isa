@@ -591,7 +591,7 @@ impl Vm {
 
         let has_jumped = start_ic != self.registers.ic;
         // Only syscall uses 1 instruction, others use 3
-        if (instr >> 2) & 0b111111 == 0b111111 {
+        if instr == 0b11101111 {
             (has_jumped, 1)
         } else {
             (has_jumped, 3)
