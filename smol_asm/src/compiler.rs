@@ -1,6 +1,6 @@
 use smol_file::{SmolFile, Storage, StorageItem};
 
-use crate::ast::{ASTTree, Arg2, Instruction, R8Regs, Variable, I8, R8};
+use crate::ast::{ASTTree, Arg2, Instruction, R16Regs, R8Regs, Variable, A16, I16, I8, R16, R8};
 
 trait Compile {
     fn compile(&self) -> Vec<u8>;
@@ -20,6 +20,53 @@ impl Compile for Arg2<R8, I8> {
     }
 }
 
+impl Compile for Arg2<R16, R16> {
+    fn compile(&self) -> Vec<u8> {
+        let arg = (self.arg2.compile()[0] << 4) | self.arg1.compile()[0];
+        vec![arg]
+    }
+}
+
+impl Compile for Arg2<R16, I16> {
+    fn compile(&self) -> Vec<u8> {
+        let arg = self.arg1.compile()[0];
+        let arg2 = self.arg2.compile();
+        vec![arg, arg2[0], arg2[1]]
+    }
+}
+
+impl Compile for Arg2<A16, R16> {
+    fn compile(&self) -> Vec<u8> {
+        let arg = self.arg1.compile();
+        let arg2 = self.arg2.compile()[0];
+        vec![arg[0], arg[1], arg2]
+    }
+}
+
+impl Compile for Arg2<A16, I16> {
+    fn compile(&self) -> Vec<u8> {
+        let arg = self.arg1.compile();
+        let arg2 = self.arg2.compile();
+        vec![arg[0], arg[1], arg2[0], arg2[1]]
+    }
+}
+
+impl Compile for Arg2<A16, R8> {
+    fn compile(&self) -> Vec<u8> {
+        let arg = self.arg1.compile();
+        let arg2 = self.arg2.compile()[0];
+        vec![arg[0], arg[1], arg2]
+    }
+}
+
+impl Compile for Arg2<A16, I8> {
+    fn compile(&self) -> Vec<u8> {
+        let arg = self.arg1.compile();
+        let arg2 = self.arg2.compile()[0];
+        vec![arg[0], arg[1], arg2]
+    }
+}
+
 impl Compile for R8 {
     fn compile(&self) -> Vec<u8> {
         let val: u8 = match self.register {
@@ -36,9 +83,31 @@ impl Compile for R8 {
     }
 }
 
+impl Compile for R16 {
+    fn compile(&self) -> Vec<u8> {
+        let val: u8 = match self.register {
+            R16Regs::L0 => 0b1001,
+            R16Regs::L1 => 0b1010,
+        };
+        vec![val]
+    }
+}
+
 impl Compile for I8 {
     fn compile(&self) -> Vec<u8> {
         vec![self.value]
+    }
+}
+
+impl Compile for I16 {
+    fn compile(&self) -> Vec<u8> {
+        self.value.to_le_bytes().into()
+    }
+}
+
+impl Compile for A16 {
+    fn compile(&self) -> Vec<u8> {
+        self.value.to_le_bytes().into()
     }
 }
 
@@ -71,6 +140,13 @@ enum ALUSrc {
     Decrement,
 }
 
+#[allow(dead_code)]
+enum LoadStoreType {
+    Load,
+    Store,
+    Swap,
+}
+
 fn compile_alu_equality(tt: ALUType, source: ALUSrc, is_16b: bool, noop: bool) -> u8 {
     #[allow(clippy::unusual_byte_groupings)]
     let op = match tt {
@@ -94,6 +170,39 @@ fn compile_alu_equality(tt: ALUType, source: ALUSrc, is_16b: bool, noop: bool) -
     }
 
     if noop {
+        op |= 0b1;
+    }
+
+    op
+}
+
+fn compile_load_store(
+    tt: LoadStoreType,
+    is_memtarget: bool,
+    is_immiddiate: bool,
+    is_16b: bool,
+    is_cr: bool,
+) -> u8 {
+    #[allow(clippy::unusual_byte_groupings)]
+    let mut op = match tt {
+        LoadStoreType::Store => 0b01_00_0_0_0_0,
+        LoadStoreType::Load => 0b01_01_0_0_0_0,
+        LoadStoreType::Swap => 0b01_11_0_0_0_0,
+    };
+
+    if is_memtarget {
+        op |= 0b1000;
+    }
+
+    if is_immiddiate {
+        op |= 0b100;
+    }
+
+    if is_16b {
+        op |= 0b10;
+    }
+
+    if is_cr {
         op |= 0b1;
     }
 
@@ -184,6 +293,54 @@ pub fn compile_ast(ast: ASTTree) -> SmolFile {
             Instruction::Syscall(_) => {
                 // hardcoded syscall binary
                 [0b11101111].to_vec()
+            }
+            Instruction::St(instr) => {
+                let mut args = instr.inner().compile();
+                let op = compile_load_store(LoadStoreType::Store, false, false, false, false);
+                args.insert(0, op);
+                args
+            }
+            Instruction::StL(instr) => {
+                let mut args = instr.inner().compile();
+                let op = compile_load_store(LoadStoreType::Store, false, false, true, false);
+                args.insert(0, op);
+                args
+            }
+            Instruction::StI(instr) => {
+                let mut args = instr.inner().compile();
+                let op = compile_load_store(LoadStoreType::Store, false, true, false, false);
+                args.insert(0, op);
+                args
+            }
+            Instruction::StIL(instr) => {
+                let mut args = instr.inner().compile();
+                let op = compile_load_store(LoadStoreType::Store, false, true, true, false);
+                args.insert(0, op);
+                args
+            }
+            Instruction::Stm(instr) => {
+                let mut args = instr.inner().compile();
+                let op = compile_load_store(LoadStoreType::Store, true, true, false, false);
+                args.insert(0, op);
+                args
+            }
+            Instruction::StmL(instr) => {
+                let mut args = instr.inner().compile();
+                let op = compile_load_store(LoadStoreType::Store, true, true, true, false);
+                args.insert(0, op);
+                args
+            }
+            Instruction::Str(instr) => {
+                let mut args = instr.inner().compile();
+                let op = compile_load_store(LoadStoreType::Store, true, false, false, false);
+                args.insert(0, op);
+                args
+            }
+            Instruction::StrL(instr) => {
+                let mut args = instr.inner().compile();
+                let op = compile_load_store(LoadStoreType::Store, true, false, true, false);
+                args.insert(0, op);
+                args
             }
         })
         .collect();
