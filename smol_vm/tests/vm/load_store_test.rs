@@ -124,3 +124,38 @@ pub fn is_stores_16b_bregister_in_memory() {
     let val = u16::from_le_bytes([vm.stack.memory()[256], vm.stack.memory()[257]]);
     assert_eq!(val, 258);
 }
+
+#[test]
+pub fn it_loads_to_register() {
+    let mut vm = Vm::default();
+    vm.stack.memory_mut()[256] = 5;
+    vm.instructions.instructions = vec![
+        // LDM  a/16 r/8  - Load register from memory
+        0b01_01_1_0_0_0,
+        // address of 256 in 16 bit little endian
+        0b00000000,
+        0b00000001,
+        // Register r2
+        0b0000_0010,
+    ];
+    vm.run();
+    assert_eq!(vm.registers.r2, 5);
+}
+
+#[test]
+pub fn it_loads_to_16b_register() {
+    let mut vm = Vm::default();
+    vm.stack.memory_mut()[256] = 0b00000010;
+    vm.stack.memory_mut()[257] = 0b00000001;
+    vm.instructions.instructions = vec![
+        // LDML a/16 r/16 - Load 16-bit register from memory
+        0b01_01_1_0_1_0,
+        // address of 256 in 16 bit little endian
+        0b00000000,
+        0b00000001,
+        // Register l1
+        0b0000_1010,
+    ];
+    vm.run();
+    assert_eq!(vm.registers.l1, 258);
+}
