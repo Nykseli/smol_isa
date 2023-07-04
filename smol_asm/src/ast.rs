@@ -71,11 +71,21 @@ pub enum R8Regs {
 }
 
 #[derive(Debug)]
+pub enum R16Regs {
+    L0,
+    L1,
+}
+
+#[derive(Debug)]
 pub enum RegType {
     /// 8-bit register
     R8(R8Regs),
     /// 8-bit immediate
     I8(u8),
+    /// 16-bit register
+    R16(R16Regs),
+    /// 16-bit immediate
+    I16(u16),
 }
 
 pub trait Register {
@@ -165,6 +175,108 @@ impl Register for I8 {
 }
 
 #[derive(Debug)]
+pub struct R16 {
+    pub register: R16Regs,
+}
+
+impl TryFrom<&str> for R16 {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let val = value.trim();
+
+        fn fail(value: &str) -> Result<R16, String> {
+            Err(format!("Expected l0-1, received {value}"))
+        }
+
+        if val.len() != 2 || val.as_bytes()[0] != b'l' {
+            return fail(value);
+        }
+
+        // TODO: handle the ascii values properly
+        let reg = val.as_bytes()[1] - 48;
+        if reg > 1 {
+            return fail(value);
+        }
+
+        let register = match reg {
+            0 => R16Regs::L0,
+            1 => R16Regs::L1,
+            _ => unreachable!(),
+        };
+
+        Ok(Self { register })
+    }
+}
+
+impl Register for R16 {
+    fn parse(self) -> RegType {
+        RegType::R16(self.register)
+    }
+
+    fn try_parse(input: &str) -> Result<Self, String> {
+        input.try_into()
+    }
+}
+
+#[derive(Debug)]
+pub struct I16 {
+    pub value: u16,
+}
+
+impl TryFrom<&str> for I16 {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let val = value.trim();
+        let value = val
+            .parse::<u16>()
+            .map_err(|_| format!("Expected 0-65535 value, got {val}"))?;
+
+        Ok(Self { value })
+    }
+}
+
+impl Register for I16 {
+    fn parse(self) -> RegType {
+        RegType::I16(self.value)
+    }
+
+    fn try_parse(input: &str) -> Result<Self, String> {
+        input.try_into()
+    }
+}
+
+#[derive(Debug)]
+pub struct A16 {
+    pub value: u16,
+}
+
+impl TryFrom<&str> for A16 {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        let val = value.trim();
+        let value = val
+            .parse::<u16>()
+            .map_err(|_| format!("Expected 0-65535 value, got {val}"))?;
+
+        Ok(Self { value })
+    }
+}
+
+impl Register for A16 {
+    // Parse should be not used
+    fn parse(self) -> RegType {
+        RegType::I16(self.value)
+    }
+
+    fn try_parse(input: &str) -> Result<Self, String> {
+        input.try_into()
+    }
+}
+
+#[derive(Debug)]
 #[allow(dead_code)]
 pub struct InstrLine<T> {
     instr: T,
@@ -185,6 +297,16 @@ impl<T> InstrLine<T> {
 pub enum Instruction {
     Add(InstrLine<Arg2<R8, R8>>),
     AddI(InstrLine<Arg2<R8, I8>>),
+
+    St(InstrLine<Arg2<R8, R8>>),
+    StL(InstrLine<Arg2<R16, R16>>),
+    StI(InstrLine<Arg2<R8, I8>>),
+    StIL(InstrLine<Arg2<R16, I16>>),
+    Stm(InstrLine<Arg2<A16, I8>>),
+    StmL(InstrLine<Arg2<A16, I16>>),
+    Str(InstrLine<Arg2<A16, R8>>),
+    StrL(InstrLine<Arg2<A16, R16>>),
+
     Syscall(InstrLine<Arg0>),
     Sv(InstrLine<String>),
     Uv(InstrLine<Arg0>),
@@ -301,6 +423,46 @@ fn parse_instruction_line(idx: usize, line: &str) -> Result<Instruction, String>
     } else if instr == "addi" {
         Ok(Instruction::AddI(InstrLine::new(
             Arg2::<R8, I8>::try_parse(line)?,
+            idx,
+        )))
+    } else if instr == "st" {
+        Ok(Instruction::St(InstrLine::new(
+            Arg2::<R8, R8>::try_parse(line)?,
+            idx,
+        )))
+    } else if instr == "stl" {
+        Ok(Instruction::StL(InstrLine::new(
+            Arg2::<R16, R16>::try_parse(line)?,
+            idx,
+        )))
+    } else if instr == "sti" {
+        Ok(Instruction::StI(InstrLine::new(
+            Arg2::<R8, I8>::try_parse(line)?,
+            idx,
+        )))
+    } else if instr == "stil" {
+        Ok(Instruction::StIL(InstrLine::new(
+            Arg2::<R16, I16>::try_parse(line)?,
+            idx,
+        )))
+    } else if instr == "stm" {
+        Ok(Instruction::Stm(InstrLine::new(
+            Arg2::<A16, I8>::try_parse(line)?,
+            idx,
+        )))
+    } else if instr == "stml" {
+        Ok(Instruction::StmL(InstrLine::new(
+            Arg2::<A16, I16>::try_parse(line)?,
+            idx,
+        )))
+    } else if instr == "str" {
+        Ok(Instruction::Str(InstrLine::new(
+            Arg2::<A16, R8>::try_parse(line)?,
+            idx,
+        )))
+    } else if instr == "strl" {
+        Ok(Instruction::StrL(InstrLine::new(
+            Arg2::<A16, R16>::try_parse(line)?,
             idx,
         )))
     } else if instr == "syscall" {
