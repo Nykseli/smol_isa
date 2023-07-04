@@ -342,6 +342,18 @@ pub fn compile_ast(ast: ASTTree) -> SmolFile {
                 args.insert(0, op);
                 args
             }
+            Instruction::Ldm(instr) => {
+                let mut args = instr.inner().compile();
+                let op = compile_load_store(LoadStoreType::Load, true, false, false, false);
+                args.insert(0, op);
+                args
+            }
+            Instruction::LdmL(instr) => {
+                let mut args = instr.inner().compile();
+                let op = compile_load_store(LoadStoreType::Load, true, false, true, false);
+                args.insert(0, op);
+                args
+            }
         })
         .collect();
 

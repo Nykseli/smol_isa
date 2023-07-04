@@ -306,6 +306,8 @@ pub enum Instruction {
     StmL(InstrLine<Arg2<A16, I16>>),
     Str(InstrLine<Arg2<A16, R8>>),
     StrL(InstrLine<Arg2<A16, R16>>),
+    Ldm(InstrLine<Arg2<A16, R8>>),
+    LdmL(InstrLine<Arg2<A16, R16>>),
 
     Syscall(InstrLine<Arg0>),
     Sv(InstrLine<String>),
@@ -462,6 +464,16 @@ fn parse_instruction_line(idx: usize, line: &str) -> Result<Instruction, String>
         )))
     } else if instr == "strl" {
         Ok(Instruction::StrL(InstrLine::new(
+            Arg2::<A16, R16>::try_parse(line)?,
+            idx,
+        )))
+    } else if instr == "ldm" {
+        Ok(Instruction::Ldm(InstrLine::new(
+            Arg2::<A16, R8>::try_parse(line)?,
+            idx,
+        )))
+    } else if instr == "ldml" {
+        Ok(Instruction::LdmL(InstrLine::new(
             Arg2::<A16, R16>::try_parse(line)?,
             idx,
         )))
