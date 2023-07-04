@@ -347,3 +347,99 @@ pub fn it_decrements_r7() {
 
     assert_eq!(vm.registers.r7, 0b01101110);
 }
+
+#[test]
+pub fn it_sets_eq_flag_register() {
+    let mut vm = Vm::default();
+    vm.registers.r6 = 50;
+    vm.registers.r7 = 50;
+    vm.instructions.instructions = vec![
+        // ALU EQR
+        0b00_110_0_0_0,
+        // Register r7 and r6
+        0b0110_0111,
+    ];
+    vm.run();
+
+    assert_eq!(vm.registers.fg, 0b1);
+}
+
+#[test]
+pub fn it_sets_eq_flag_immidiate() {
+    let mut vm = Vm::default();
+    vm.registers.r7 = 50;
+    vm.instructions.instructions = vec![
+        // ALU EQR
+        0b00_110_1_0_0,
+        // Register r7
+        0b0000_0111,
+        50,
+    ];
+    vm.run();
+
+    assert_eq!(vm.registers.fg, 0b1);
+}
+
+#[test]
+pub fn it_sets_gt_flag_register() {
+    let mut vm = Vm::default();
+    vm.registers.r6 = 49;
+    vm.registers.r7 = 50;
+    vm.instructions.instructions = vec![
+        // ALU EQR
+        0b00_110_0_0_0,
+        // Register r7 and r6
+        0b0110_0111,
+    ];
+    vm.run();
+
+    assert_eq!(vm.registers.fg, 0b10);
+}
+
+#[test]
+pub fn it_sets_gt_flag_immidiate() {
+    let mut vm = Vm::default();
+    vm.registers.r7 = 50;
+    vm.instructions.instructions = vec![
+        // ALU EQR
+        0b00_110_1_0_0,
+        // Register r7
+        0b0000_0111,
+        49,
+    ];
+    vm.run();
+
+    assert_eq!(vm.registers.fg, 0b10);
+}
+
+#[test]
+pub fn it_sets_lt_flag_register() {
+    let mut vm = Vm::default();
+    vm.registers.r6 = 60;
+    vm.registers.r7 = 50;
+    vm.instructions.instructions = vec![
+        // ALU EQR
+        0b00_110_0_0_0,
+        // Register r7 and r6
+        0b0110_0111,
+    ];
+    vm.run();
+
+    assert_eq!(vm.registers.fg, 0b100);
+}
+
+#[test]
+pub fn it_sets_lt_flag_immidiate() {
+    let mut vm = Vm::default();
+    vm.registers.r7 = 50;
+    vm.instructions.instructions = vec![
+        // ALU EQR
+        0b00_110_1_0_0,
+        // Register r7
+        0b0000_0111,
+        60,
+    ];
+    vm.run();
+
+    assert_eq!(vm.registers.fg, 0b100);
+}
