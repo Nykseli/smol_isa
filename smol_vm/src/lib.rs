@@ -11,7 +11,7 @@ pub mod syscall;
 use registers::Registers;
 use syscall::vm_syscall;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 enum Either<L, R> {
     Left(L),
     Right(R),
@@ -351,6 +351,7 @@ impl Vm {
     }
 
     fn decode_alu_instr(&mut self, instr: u8) -> u16 {
+        // TODO: 16 bit support
         let (used, source_vals) = match instr & 0b100 {
             0b000 => {
                 let regs = self.instructions.get(self.registers.ic + 1);
@@ -389,8 +390,15 @@ impl Vm {
             0b101 => source_vals.0.value = !source_vals.0.value,
             // Equality
             0b110 => {
-                // TODO: implement this with branching
-                unimplemented!("ALUEquality is not implemented")
+                // reset equailty flags
+                self.registers.fg &= 0b000;
+                if source_vals.0.value == source_vals.1.value {
+                    self.registers.fg |= 0b1;
+                } else if source_vals.0.value > source_vals.1.value {
+                    self.registers.fg |= 0b10;
+                } else if source_vals.0.value < source_vals.1.value {
+                    self.registers.fg |= 0b100;
+                }
             }
             0b111 => {
                 // Decode the increment/decrement function
