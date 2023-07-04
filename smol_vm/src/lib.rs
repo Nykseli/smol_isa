@@ -515,18 +515,44 @@ impl Vm {
         used
     }
 
-    fn decode_branch_instr(&mut self, instr: u8) {
+    /// First tuple value is true if a jump happens
+    fn decode_branch_instr(&mut self, instr: u8) -> (bool, u16) {
+        let start_ic = self.registers.ic;
+
+        let address = if (instr >> 3) & 0b111 <= 0b100 {
+            self.immediate_instr_16b(self.registers.ic + 1)
+        } else {
+            // Since Only Branch/Jump will use the address, this value doesn't matter
+            0
+        };
+
         match (instr >> 3) & 0b111 {
             // Relative jump
-            0b000 => unimplemented!("Relative jump is not implemented"),
+            0b000 => self.registers.ic = address,
             // Branch if equal
-            0b001 => unimplemented!("Branch if equal is not implemented"),
+            0b001 => {
+                if self.registers.fg & 0b1 == 1 {
+                    self.registers.ic = address
+                }
+            }
             // Branch if not equal
-            0b010 => unimplemented!("Branch if not equal is not implemented"),
+            0b010 => {
+                if self.registers.fg & 0b1 == 0 {
+                    self.registers.ic = address
+                }
+            }
             // Branch if greater than
-            0b011 => unimplemented!("Branch if not equal is not implemented"),
+            0b011 => {
+                if (self.registers.fg >> 1) & 0b1 == 1 {
+                    self.registers.ic = address
+                }
+            }
             // Branch if less than
-            0b100 => unimplemented!("Branch if not equal is not implemented"),
+            0b100 => {
+                if (self.registers.fg >> 2) & 0b1 == 1 {
+                    self.registers.ic = address
+                }
+            }
             // Call
             0b101 => {
                 if instr & 0b111 == 0b111 {
@@ -541,6 +567,14 @@ impl Vm {
             0b111 => unimplemented!("Return from interrupt is not implemented"),
             // Since we use and (&) we limit ourself to values 0-3
             _ => unimplemented!("Only Add AluFamily is implemnted"),
+        }
+
+        let has_jumped = start_ic != self.registers.ic;
+        // Only syscall uses 1 instruction, others use 3
+        if (instr >> 2) & 0b111111 == 0b111111 {
+            (has_jumped, 1)
+        } else {
+            (has_jumped, 3)
         }
     }
 
@@ -602,8 +636,10 @@ impl Vm {
                 self.registers.ic += used;
             }
             0b11 => {
-                self.decode_branch_instr(instr);
-                self.registers.ic += 1;
+                let ret = self.decode_branch_instr(instr);
+                if let (false, used) = ret {
+                    self.registers.ic += used;
+                }
             }
             // Since we use and (&) we limit ourself to values 0-3
             _ => unreachable!(),

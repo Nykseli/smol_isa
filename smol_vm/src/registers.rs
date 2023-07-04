@@ -5,6 +5,9 @@ pub struct Registers {
     /// (16,ro) - Instruction Counter
     pub ic: u16,
     /// (16,ro) - Core Flags
+    /// (1 >> 0) Is equal
+    /// (1 >> 1) Is greater than
+    /// (1 >> 2) Is less than
     pub fg: u16,
     /// (16,rw) - Call Register
     pub cr: u16,
