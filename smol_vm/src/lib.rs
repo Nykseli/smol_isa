@@ -416,6 +416,7 @@ impl Vm {
 
         let ic = self.registers.ic + 1;
         match (instr >> 4) & 0b11 {
+            // Store
             0b00 => {
                 let has_memory_target = (instr >> 3) & 0b1 == 1;
 
@@ -473,6 +474,33 @@ impl Vm {
                     _ => unreachable!(),
                 }
             }
+            // Load
+            0b01 => {
+                // Address is decoded in the same way as immideates
+                let addr = self.immediate_instr_16b(ic);
+                // The target register is always after the two address bytes
+                let mut target = self.decode_register(self.instructions.get(ic + 2));
+
+                // We can only load into registers
+                match instr & 0b1111 {
+                    // 8 bit register
+                    0b1000 => {
+                        let val = self.stack.load_value(addr);
+                        target.value = val.into();
+                    }
+                    // 16 bit register
+                    0b1010 => {
+                        let val = self.stack.load_value_16(addr);
+                        target.value = val.into();
+                    }
+
+                    _ => unreachable!("Invalid load instruction"),
+                }
+
+                self.register_save(target);
+                used += 3;
+            }
+            0b11 => unimplemented!("Swap is not implemented"),
             _ => unreachable!(),
         }
 
