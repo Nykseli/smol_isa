@@ -11,6 +11,7 @@ fn main() {
     let file = smol_file::SmolFile::load(&args[1]);
 
     let mut vm = smol_vm::Vm::default();
+    vm.registers.ic = file.main_start;
     vm.instructions.instructions = file.instructions;
     for storage in file.storage.items {
         let mem = vm.stack.memory_mut();

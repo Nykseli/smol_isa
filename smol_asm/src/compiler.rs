@@ -495,8 +495,15 @@ pub fn compile_ast(ast: ASTTree) -> SmolFile {
         }
     }
 
+    let main_start = if let Some((_, addr)) = labels.iter().find(|(name, _)| *name == "main") {
+        *addr
+    } else {
+        panic!("main label was not found");
+    };
+
     SmolFile {
         storage,
+        main_start,
         instructions,
     }
 }

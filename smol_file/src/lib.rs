@@ -65,6 +65,8 @@ impl Storage {
 #[derive(Debug)]
 pub struct SmolFile {
     pub storage: Storage,
+    /// Instruction start address
+    pub main_start: u16,
     pub instructions: Vec<u8>,
 }
 
@@ -82,6 +84,9 @@ impl SmolFile {
             }
         }
 
+        // start addess
+        storage_bytes.extend(self.main_start.to_le_bytes().iter());
+
         // instructions
         storage_bytes.extend(self.instructions.iter());
 
@@ -92,10 +97,12 @@ impl SmolFile {
         let file_bytes = fs::read(path).unwrap();
         let storage_size = u16::from_le_bytes([file_bytes[0], file_bytes[1]]) as usize;
         let storage = Storage::load(&file_bytes);
-        let instructions: Vec<u8> = file_bytes[storage_size + 2..].into();
+        let main_start = u16::from_le_bytes([file_bytes[storage_size + 2], file_bytes[storage_size + 3]]);
+        let instructions: Vec<u8> = file_bytes[storage_size + 4..].into();
 
         Self {
             storage,
+            main_start,
             instructions,
         }
     }
