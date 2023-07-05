@@ -297,6 +297,10 @@ impl<T> InstrLine<T> {
 pub enum Instruction {
     Add(InstrLine<Arg2<R8, R8>>),
     AddI(InstrLine<Arg2<R8, I8>>),
+    EqR(InstrLine<Arg2<R8, R8>>),
+    EqI(InstrLine<Arg2<R8, I8>>),
+    EqRL(InstrLine<Arg2<R16, R16>>),
+    EqIL(InstrLine<Arg2<R16, I16>>),
 
     St(InstrLine<Arg2<R8, R8>>),
     StL(InstrLine<Arg2<R16, R16>>),
@@ -309,9 +313,15 @@ pub enum Instruction {
     Ldm(InstrLine<Arg2<A16, R8>>),
     LdmL(InstrLine<Arg2<A16, R16>>),
 
+    Be(InstrLine<String>),
+    Bne(InstrLine<String>),
+    Bgt(InstrLine<String>),
+    Blt(InstrLine<String>),
     Syscall(InstrLine<Arg0>),
     Sv(InstrLine<String>),
     Uv(InstrLine<Arg0>),
+
+    Label(String),
 }
 
 #[derive(Debug)]
@@ -427,6 +437,26 @@ fn parse_instruction_line(idx: usize, line: &str) -> Result<Instruction, String>
             Arg2::<R8, I8>::try_parse(line)?,
             idx,
         )))
+    } else if instr == "eqr" {
+        Ok(Instruction::EqR(InstrLine::new(
+            Arg2::<R8, R8>::try_parse(line)?,
+            idx,
+        )))
+    } else if instr == "eqi" {
+        Ok(Instruction::EqI(InstrLine::new(
+            Arg2::<R8, I8>::try_parse(line)?,
+            idx,
+        )))
+    } else if instr == "eqil" {
+        Ok(Instruction::EqIL(InstrLine::new(
+            Arg2::<R16, I16>::try_parse(line)?,
+            idx,
+        )))
+    } else if instr == "eqrl" {
+        Ok(Instruction::EqRL(InstrLine::new(
+            Arg2::<R16, R16>::try_parse(line)?,
+            idx,
+        )))
     } else if instr == "st" {
         Ok(Instruction::St(InstrLine::new(
             Arg2::<R8, R8>::try_parse(line)?,
@@ -479,6 +509,30 @@ fn parse_instruction_line(idx: usize, line: &str) -> Result<Instruction, String>
         )))
     } else if instr == "syscall" {
         Ok(Instruction::Syscall(InstrLine::new(Arg0 {}, idx)))
+    } else if instr == "be" {
+        let args: Vec<&str> = line.split_ascii_whitespace().collect();
+        if args.len() < 2 {
+            return Err("BE requires an argument".into());
+        }
+        Ok(Instruction::Be(InstrLine::new(args[1].into(), idx)))
+    } else if instr == "bne" {
+        let args: Vec<&str> = line.split_ascii_whitespace().collect();
+        if args.len() < 2 {
+            return Err("BNE requires an argument".into());
+        }
+        Ok(Instruction::Bne(InstrLine::new(args[1].into(), idx)))
+    } else if instr == "blt" {
+        let args: Vec<&str> = line.split_ascii_whitespace().collect();
+        if args.len() < 2 {
+            return Err("BLT requires an argument".into());
+        }
+        Ok(Instruction::Blt(InstrLine::new(args[1].into(), idx)))
+    } else if instr == "bgt" {
+        let args: Vec<&str> = line.split_ascii_whitespace().collect();
+        if args.len() < 2 {
+            return Err("BGT requires an argument".into());
+        }
+        Ok(Instruction::Bgt(InstrLine::new(args[1].into(), idx)))
     } else if instr == "uv" {
         Ok(Instruction::Uv(InstrLine::new(Arg0 {}, idx)))
     } else if instr == "sv" {
@@ -487,6 +541,15 @@ fn parse_instruction_line(idx: usize, line: &str) -> Result<Instruction, String>
             panic!("SV requires an argument");
         }
         Ok(Instruction::Sv(InstrLine::new(args[1].into(), idx)))
+    } else if instr.ends_with(':') {
+        let args: Vec<&str> = line.split_ascii_whitespace().collect();
+        if args.len() > 1 {
+            return Err(format!(
+                "On line: {idx}: Instruction '{instr}' has not been implemented"
+            ));
+        }
+        // Remove the ':'
+        Ok(Instruction::Label(instr[..instr.len() - 1].into()))
     } else {
         Err(format!(
             "On line: {idx}: Instruction '{instr}' has not been implemented"

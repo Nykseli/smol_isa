@@ -147,6 +147,15 @@ enum LoadStoreType {
     Swap,
 }
 
+#[allow(dead_code)]
+enum BranchCall {
+    Jump,
+    BranchEq,
+    BranchNe,
+    BranchGt,
+    BranchLt,
+}
+
 fn compile_alu_equality(tt: ALUType, source: ALUSrc, is_16b: bool, noop: bool) -> u8 {
     #[allow(clippy::unusual_byte_groupings)]
     let op = match tt {
@@ -174,6 +183,35 @@ fn compile_alu_equality(tt: ALUType, source: ALUSrc, is_16b: bool, noop: bool) -
     }
 
     op
+}
+
+fn compile_branch_call<'a>(
+    tt: BranchCall,
+    label: &'a str,
+    label_instrs: &mut Vec<(&'a str, usize, bool)>,
+    labels: &mut [(&'a str, u16)],
+    instr_len: usize,
+) -> Vec<u8> {
+    #[allow(clippy::unusual_byte_groupings)]
+    let op: u8 = match tt {
+        BranchCall::Jump => 0b11_000_000,
+        BranchCall::BranchEq => 0b11_001_000,
+        BranchCall::BranchNe => 0b11_010_000,
+        BranchCall::BranchGt => 0b11_011_000,
+        BranchCall::BranchLt => 0b11_100_000,
+    };
+
+    let mut args = vec![op, 0, 0];
+
+    if let Some(addr) = labels.iter().find(|(l, _)| l == &label) {
+        let add_le = addr.1.to_le_bytes();
+        args[1] = add_le[0];
+        args[2] = add_le[1];
+    } else {
+        label_instrs.push((label, instr_len + 1, false));
+    }
+
+    args
 }
 
 fn compile_load_store(
@@ -263,10 +301,16 @@ fn variable_offset(name: &str, ast: &ASTTree, storage: &Storage) -> u16 {
 pub fn compile_ast(ast: ASTTree) -> SmolFile {
     let storage = compile_variables(&ast.variables);
 
-    let instructions: Vec<u8> = ast
-        .instructions
-        .iter()
-        .flat_map(|instr| match instr {
+    // When coming acorss a labe instruction, check if the label already exists
+    // if it does, get the address and compile it
+    // if it doesn't, save the label instr here and mutate when you find the label
+    let mut labels: Vec<(&str, u16)> = Vec::new();
+    let mut label_instrs: Vec<(&str, usize, bool)> = Vec::new();
+
+    let mut instructions: Vec<u8> = Vec::new();
+
+    for instr in &ast.instructions {
+        let bytes = match instr {
             Instruction::Add(instr) => {
                 let mut args = instr.inner().compile();
                 let op = compile_alu_equality(ALUType::Add, ALUSrc::Register, false, false);
@@ -276,6 +320,30 @@ pub fn compile_ast(ast: ASTTree) -> SmolFile {
             Instruction::AddI(instr) => {
                 let mut args = instr.inner().compile();
                 let op = compile_alu_equality(ALUType::Add, ALUSrc::Immidiate, false, false);
+                args.insert(0, op);
+                args
+            }
+            Instruction::EqR(instr) => {
+                let mut args = instr.inner().compile();
+                let op = compile_alu_equality(ALUType::Equality, ALUSrc::Register, false, false);
+                args.insert(0, op);
+                args
+            }
+            Instruction::EqI(instr) => {
+                let mut args = instr.inner().compile();
+                let op = compile_alu_equality(ALUType::Equality, ALUSrc::Immidiate, false, false);
+                args.insert(0, op);
+                args
+            }
+            Instruction::EqRL(instr) => {
+                let mut args = instr.inner().compile();
+                let op = compile_alu_equality(ALUType::Equality, ALUSrc::Register, true, false);
+                args.insert(0, op);
+                args
+            }
+            Instruction::EqIL(instr) => {
+                let mut args = instr.inner().compile();
+                let op = compile_alu_equality(ALUType::Equality, ALUSrc::Immidiate, true, false);
                 args.insert(0, op);
                 args
             }
@@ -354,8 +422,78 @@ pub fn compile_ast(ast: ASTTree) -> SmolFile {
                 args.insert(0, op);
                 args
             }
-        })
-        .collect();
+            Instruction::Be(instr) => {
+                let label = instr.inner();
+                compile_branch_call(
+                    BranchCall::BranchEq,
+                    label,
+                    &mut label_instrs,
+                    &mut labels,
+                    instructions.len(),
+                )
+            }
+            Instruction::Bne(instr) => {
+                let label = instr.inner();
+                compile_branch_call(
+                    BranchCall::BranchNe,
+                    label,
+                    &mut label_instrs,
+                    &mut labels,
+                    instructions.len(),
+                )
+            }
+            Instruction::Bgt(instr) => {
+                let label = instr.inner();
+                compile_branch_call(
+                    BranchCall::BranchGt,
+                    label,
+                    &mut label_instrs,
+                    &mut labels,
+                    instructions.len(),
+                )
+            }
+            Instruction::Blt(instr) => {
+                let label = instr.inner();
+                compile_branch_call(
+                    BranchCall::BranchLt,
+                    label,
+                    &mut label_instrs,
+                    &mut labels,
+                    instructions.len(),
+                )
+            }
+            Instruction::Label(label) => {
+                let exists = labels.iter().any(|(lab, _)| lab == label);
+                if exists {
+                    // TODO: AST should handle this
+                    panic!("Duplicate label '{label}' found");
+                }
+
+                let addr = instructions.len() as u16;
+                let add_le = addr.to_le_bytes();
+                label_instrs.iter_mut().for_each(|(lab, addr, init)| {
+                    if lab == label {
+                        let bytes = &mut instructions;
+                        bytes[*addr] = add_le[0];
+                        bytes[*addr + 1] = add_le[1];
+                        *init = true;
+                    }
+                });
+
+                labels.push((label, addr));
+                // TODO: handle the lable in a less hacky way
+                [].into()
+            }
+        };
+
+        instructions.extend(bytes.iter());
+    }
+
+    for label in label_instrs {
+        if !label.2 {
+            panic!("Label for '{}' was not found", label.0);
+        }
+    }
 
     SmolFile {
         storage,
