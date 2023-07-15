@@ -143,6 +143,7 @@ enum Register {
     Fg,
     Cr,
     Sp,
+    Vp,
     Zr,
     R0,
     R1,
@@ -214,20 +215,6 @@ impl Stack {
     /// Variable space is the last 32kib bytes
     pub fn variable_mut(&mut self) -> &mut [u8] {
         &mut self.memory[(u16::MAX / 2) as usize..]
-    }
-
-    /// Last 2 bytes of stack memory is reserved for saving sp
-    pub fn save_stack_pointer(&mut self, sp: u16) {
-        let [li, mi] = sp.to_le_bytes();
-        self.memory[(u16::MAX - 1) as usize] = li;
-        self.memory[(u16::MAX - 2) as usize] = mi;
-    }
-
-    /// Last 2 bytes of stack memory is reserved for saving sp
-    pub fn load_stack_pointer(&self) -> u16 {
-        let li = self.memory[(u16::MAX - 1) as usize];
-        let mi = self.memory[(u16::MAX - 2) as usize];
-        u16::from_le_bytes([li, mi])
     }
 
     pub fn save_value(&mut self, addr: u16, value: u8) {
@@ -315,7 +302,7 @@ impl Vm {
             0b0101 => RegisterValue::new(self.registers.r5.into(), Register::R5),
             0b0110 => RegisterValue::new(self.registers.r6.into(), Register::R6),
             0b0111 => RegisterValue::new(self.registers.r7.into(), Register::R7),
-            0b1000 => todo!("What register is 0b1000?"),
+            0b1000 => RegisterValue::new(self.registers.vp.into(), Register::Vp),
             0b1001 => RegisterValue::new(self.registers.l0.into(), Register::L0),
             0b1010 => RegisterValue::new(self.registers.l1.into(), Register::L1),
             0b1011 => RegisterValue::new(self.registers.ic.into(), Register::Ic),
@@ -343,6 +330,7 @@ impl Vm {
             Register::Fg => self.registers.fg = reg.value.as_u16(),
             Register::Cr => self.registers.cr = reg.value.as_u16(),
             Register::Sp => self.registers.sp = reg.value.as_u16(),
+            Register::Vp => self.registers.vp = reg.value.as_u16(),
             Register::Zr => self.registers.zr = reg.value.as_u16(),
         }
     }
@@ -641,25 +629,22 @@ impl Vm {
             }
             // Load variable
             0b10 => {
-                // We always need to save our stack pointer
-                self.stack.save_stack_pointer(self.registers.sp);
-                // Then we can set the pointer into start of the variable space
-                self.registers.sp = u16::MAX / 2;
+                self.registers.vp = u16::MAX / 2;
                 // Set used to two since only 16 immideate uses 3 (self + 1/2)
                 used = 2;
                 match (instr >> 2) & 0b11 {
                     // 8 bit and 16 register has the same logic
                     0b00 | 0b01 => {
                         let reg = self.instructions.get(self.registers.ic + 1);
-                        self.registers.sp += self.decode_register(reg).value.as_u16();
+                        self.registers.vp += self.decode_register(reg).value.as_u16();
                     }
                     // 8 bit immideate
                     0b10 => {
-                        self.registers.sp += self.immediate_instr(self.registers.ic + 1) as u16;
+                        self.registers.vp += self.immediate_instr(self.registers.ic + 1) as u16;
                     }
                     // 16 bit immideate
                     0b11 => {
-                        self.registers.sp += self.immediate_instr_16b(self.registers.ic + 1);
+                        self.registers.vp += self.immediate_instr_16b(self.registers.ic + 1);
                         used = 3;
                     }
                     _ => unreachable!(),
@@ -667,7 +652,7 @@ impl Vm {
             }
             // Unload variable
             0b11 => {
-                self.registers.sp = self.stack.load_stack_pointer();
+                self.registers.vp = u16::MAX / 2;
                 used = 1;
             }
             // Since we use and (&) we limit ourself to values 0-3

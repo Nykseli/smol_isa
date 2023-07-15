@@ -13,7 +13,7 @@ pub fn vm_syscall(register: &mut Registers, stack: &mut Stack) {
 }
 
 fn vm_syscall_read(register: &mut Registers, stack: &mut Stack) {
-    let sp = register.sp + register.r2 as u16;
+    let sp = register.vp + register.r2 as u16;
 
     let fd = register.r1 as libc::c_int;
     let buf = stack.from_sp_mut(sp).as_mut_ptr() as *mut libc::c_void;
@@ -26,7 +26,7 @@ fn vm_syscall_read(register: &mut Registers, stack: &mut Stack) {
 }
 
 fn vm_syscall_write(register: &mut Registers, stack: &mut Stack) {
-    let sp = register.sp + register.r2 as u16;
+    let sp = register.vp + register.r2 as u16;
 
     let fd = register.r1 as libc::c_int;
     let buf = stack.from_sp_mut(sp).as_mut_ptr() as *const libc::c_void;
@@ -39,7 +39,7 @@ fn vm_syscall_write(register: &mut Registers, stack: &mut Stack) {
 }
 
 fn vm_syscall_open(register: &mut Registers, stack: &mut Stack) {
-    let sp = register.sp + register.r1 as u16;
+    let sp = register.vp + register.r1 as u16;
 
     let buf = stack.from_sp_mut(sp).as_mut_ptr() as *const libc::c_char;
     // TODO: Figure out how to handle flags and mode with eight bits

@@ -13,6 +13,8 @@ pub struct Registers {
     pub cr: u16,
     /// (16,rw) - Stack pointer
     pub sp: u16,
+    /// (16,rw) - Variable pointer
+    pub vp: u16,
     /// (16,rw) - Zero register (n-bits wide)
     pub zr: u16,
 
