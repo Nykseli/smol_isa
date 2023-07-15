@@ -566,7 +566,8 @@ impl Vm {
                 if instr & 0b111 == 0b111 {
                     vm_syscall(&mut self.registers, &mut self.stack);
                 } else {
-                    self.stack_push_16b(address);
+                    // Set the offset so we can return to after the call
+                    self.stack_push_16b(start_ic + 3);
                     self.registers.ic = address
                 }
             }
