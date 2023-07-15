@@ -154,6 +154,8 @@ enum BranchCall {
     BranchNe,
     BranchGt,
     BranchLt,
+    Call,
+    Ret,
 }
 
 fn compile_alu_equality(tt: ALUType, source: ALUSrc, is_16b: bool, noop: bool) -> u8 {
@@ -199,6 +201,8 @@ fn compile_branch_call<'a>(
         BranchCall::BranchNe => 0b11_010_000,
         BranchCall::BranchGt => 0b11_011_000,
         BranchCall::BranchLt => 0b11_100_000,
+        BranchCall::Call => 0b11_101_000,
+        BranchCall::Ret => 0b11_110_000,
     };
 
     let mut args = vec![op, 0, 0];
@@ -462,6 +466,17 @@ pub fn compile_ast(ast: ASTTree) -> SmolFile {
                     instructions.len(),
                 )
             }
+            Instruction::Call(instr) => {
+                let label = instr.inner();
+                compile_branch_call(
+                    BranchCall::Call,
+                    label,
+                    &mut label_instrs,
+                    &mut labels,
+                    instructions.len(),
+                )
+            }
+            Instruction::Ret(_) => [0b11_110_000].into(),
             Instruction::Label(label) => {
                 let exists = labels.iter().any(|(lab, _)| lab == label);
                 if exists {

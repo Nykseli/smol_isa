@@ -317,6 +317,8 @@ pub enum Instruction {
     Bne(InstrLine<String>),
     Bgt(InstrLine<String>),
     Blt(InstrLine<String>),
+    Call(InstrLine<String>),
+    Ret(InstrLine<Arg0>),
     Syscall(InstrLine<Arg0>),
     Sv(InstrLine<String>),
     Uv(InstrLine<Arg0>),
@@ -533,6 +535,14 @@ fn parse_instruction_line(idx: usize, line: &str) -> Result<Instruction, String>
             return Err("BGT requires an argument".into());
         }
         Ok(Instruction::Bgt(InstrLine::new(args[1].into(), idx)))
+    } else if instr == "call" {
+        let args: Vec<&str> = line.split_ascii_whitespace().collect();
+        if args.len() < 2 {
+            return Err("CALL requires an argument".into());
+        }
+        Ok(Instruction::Call(InstrLine::new(args[1].into(), idx)))
+    } else if instr == "ret" {
+        Ok(Instruction::Ret(InstrLine::new(Arg0 {}, idx)))
     } else if instr == "uv" {
         Ok(Instruction::Uv(InstrLine::new(Arg0 {}, idx)))
     } else if instr == "sv" {
