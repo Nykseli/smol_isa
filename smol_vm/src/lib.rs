@@ -578,11 +578,12 @@ impl Vm {
                 if instr & 0b111 == 0b111 {
                     vm_syscall(&mut self.registers, &mut self.stack);
                 } else {
-                    unimplemented!("Only systemcall call is implemented");
+                    self.stack_push_16b(address);
+                    self.registers.ic = address
                 }
             }
             // Return from call
-            0b110 => unimplemented!("Return from call is not implemented"),
+            0b110 => self.registers.ic = self.stack_pop_16b(),
             // Return from interrupt
             0b111 => unimplemented!("Return from interrupt is not implemented"),
             // Since we use and (&) we limit ourself to values 0-3
@@ -590,8 +591,8 @@ impl Vm {
         }
 
         let has_jumped = start_ic != self.registers.ic;
-        // Only syscall uses 1 instruction, others use 3
-        if instr == 0b11101111 {
+        // syscall and ret use 1 instruction, others use 3
+        if instr == 0b11101111 || (instr >> 3) & 0b110 == 0b110 {
             (has_jumped, 1)
         } else {
             (has_jumped, 3)
